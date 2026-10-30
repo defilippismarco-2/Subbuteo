@@ -1,0 +1,12 @@
+{
+  "name": "Calcio da Tavolo",
+  "short_name": "Calcio",
+  "start_url": ".",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#0b2e17",
+  "theme_color": "#0b2e17",
+  "icons": [
+    { "src": "icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any maskable" }
+  ]
+}
