@@ -168,6 +168,24 @@
     return team === 0 ? { x0, x1, y0: F.b - AREA_H, y1: F.b + DEPTH } : { x0, x1, y0: F.t - DEPTH, y1: F.t + AREA_H };
   }
 
+  // Il portiere arriva su un punto solo se ci sta tutto dentro la sua area.
+  function gkCanReach(d, p) {
+    const a = gkArea(d.team);
+    return p.x - d.r >= a.x0 && p.x + d.r <= a.x1 && p.y - d.r >= a.y0 && p.y + d.r <= a.y1;
+  }
+
+  // Distanza che una pedina può percorrere lungo (dx, dy) prima di uscire dai suoi limiti.
+  function gkLimit(d, dx, dy) {
+    if (!d.gk) return Infinity;
+    const a = gkArea(d.team);
+    let t = Infinity;
+    if (dx > 0) t = Math.min(t, (a.x1 - d.r - d.x) / dx);
+    if (dx < 0) t = Math.min(t, (a.x0 + d.r - d.x) / dx);
+    if (dy > 0) t = Math.min(t, (a.y1 - d.r - d.y) / dy);
+    if (dy < 0) t = Math.min(t, (a.y0 + d.r - d.y) / dy);
+    return Math.max(0, t);
+  }
+
   function keepGoalkeeper(b) {
     const a = gkArea(b.team), r = b.r;
     if (b.x - r < a.x0) { b.x = a.x0 + r; bounce(b, 'x', 1, E_WALL); }
@@ -365,6 +383,7 @@
         const dir = { x: tx / dist, y: ty / dist };
         const cut = dir.x * gx + dir.y * gy;
         if (cut < 0.3) continue;
+        if (d.gk && !gkCanReach(d, ghost)) continue;
         let score = cut * 2 - dist / 500;
         if (pathBlocked(d, ghost, d)) score -= 2;
         if (tgt.type === 'goal') score += ballToGoal < 480 ? 0.9 : -0.4;
@@ -382,7 +401,9 @@
       speed = speedFor(best.dist, contact, DISC_FRICTION);
     } else {
       // Nessun tiro pulito: colpisci la palla con la pedina più vicina.
-      disc = mine.reduce((a, b) => (Math.hypot(b.x - ball.x, b.y - ball.y) < Math.hypot(a.x - ball.x, a.y - ball.y) ? b : a));
+      // Il portiere entra in gioco solo se la palla è dentro la sua area.
+      const usable = mine.filter((d) => !d.gk || gkCanReach(d, ball));
+      disc = usable.reduce((a, b) => (Math.hypot(b.x - ball.x, b.y - ball.y) < Math.hypot(a.x - ball.x, a.y - ball.y) ? b : a));
       const dx = ball.x - disc.x, dy = ball.y - disc.y, dl = Math.hypot(dx, dy) || 1;
       dir = { x: dx / dl, y: dy / dl };
       speed = speedFor(dl, 500, DISC_FRICTION);
@@ -577,7 +598,7 @@
       g.setLineDash([]);
     }
     // Traiettoria prevista della pedina (senza contare le collisioni)
-    const reach = Math.min(travel(power * MAX_SPEED, 0, DISC_FRICTION), 900);
+    const reach = Math.min(travel(power * MAX_SPEED, 0, DISC_FRICTION), 900, gkLimit(disc, dx, dy));
     g.strokeStyle = 'rgba(255,255,255,0.55)'; g.lineWidth = 2.5; g.setLineDash([2, 9]); g.lineCap = 'round';
     g.beginPath(); g.moveTo(disc.x + dx * (disc.r + 4), disc.y + dy * (disc.r + 4));
     g.lineTo(disc.x + dx * (disc.r + reach), disc.y + dy * (disc.r + reach)); g.stroke();
