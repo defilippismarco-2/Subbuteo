@@ -18,6 +18,7 @@
   const PICK_RADIUS = 62;                            // area di tocco generosa intorno alla pedina
   const BASE_SHOTS = 3;
   const E_BODY = 0.9, E_WALL = 0.72, E_NET = 0.25;
+  const BALL_MASS = 0.45, HEAVY_MASS = 5, HEAVY_BALL_MASS = 4;  // Palla di piombo
   const STEP = 1 / 240, SIM_STEP = 1 / 160;          // passo fisso della fisica / dell'anteprima
   const SPIN_RATE = 1.6;                             // rad/s di curva con effetto pieno
   const FORCE_MIN_SPEED = 60;                        // sotto questa velocità vento e pendenza non agiscono
@@ -52,12 +53,12 @@
   // Campi, palloni, oggetti, ostacoli
   // =====================================================================
   const FIELDS = {
-    erba: { name: 'Erba', fric: 1, lines: 'rgba(255,255,255,0.88)', obstacles: ['fango', 'irrigatore', 'vento', 'invasore'], invader: 'tifoso' },
+    erba: { name: 'Erba', fric: 1, lines: 'rgba(255,255,255,0.88)', obstacles: ['fango', 'vento', 'invasore'], invader: 'tifoso' },
     terra: { name: 'Terra', fric: 1.15, lines: 'rgba(255,248,236,0.78)', obstacles: ['fango', 'sasso', 'vento', 'pendenza', 'invasore'], invader: 'cane' },
     indoor: { name: 'Indoor', fric: 0.85, lines: '#f8fafc', obstacles: ['bagnato', 'cono', 'sagome', 'invasore'], invader: 'tifoso' },
     street: { name: 'Street', fric: 1, lines: '#facc15', obstacles: ['tombino', 'pozzanghera', 'bidone', 'pendenza', 'vento', 'invasore'], invader: 'skater' },
     neve: { name: 'Neve', fric: 1.25, lines: '#d4313c', obstacles: ['ghiaccio', 'cumulo', 'pupazzo', 'vento'] },
-    allenamento: { name: 'Allenamento', fric: 1, lines: 'rgba(255,255,255,0.8)', obstacles: ['cono', 'sagome', 'irrigatore', 'vento'] },
+    allenamento: { name: 'Allenamento', fric: 1, lines: 'rgba(255,255,255,0.8)', obstacles: ['cono', 'sagome', 'vento'] },
   };
   const FIELD_IDS = Object.keys(FIELDS);
 
@@ -75,7 +76,7 @@
     fiato: { name: 'Fiato', icon: '💨', w: 1,
       desc: 'Il turno ha 4 tiri invece di 3.', gold: '5 tiri.' },
     piombo: { name: 'Palla di piombo', icon: '⚫', w: 1,
-      desc: 'Per un tiro la tua pedina pesa il triplo: travolge gli avversari, non si fa spostare e calcia più forte.', gold: 'vale per tutti i tiri del turno.' },
+      desc: 'Per un tiro la tua pedina diventa di piombo: pesa 5 volte tanto, calcia molto più forte e trasmette il peso alla palla, che sfonda le pedine che incontra, portiere compreso.', gold: 'vale per tutti i tiri del turno.' },
     giro: { name: 'Tiro a giro', icon: '🌀', w: 1,
       desc: 'Tira normalmente: quando la pedina colpisce la palla il gioco si ferma e trascini a destra o a sinistra per far curvare la palla.', gold: 'la curva può essere il doppio più stretta.' },
     laser: { name: 'Laser', icon: '🎯', w: 1,
@@ -97,7 +98,6 @@
     cumulo: { kind: 'slow', name: 'Cumulo di neve', icon: '🌨️', desc: 'Rallenta molto palla e pedine.' },
     ghiaccio: { kind: 'ice', name: 'Ghiaccio', icon: '🧊', desc: 'Quasi senza attrito: tutto scivola lontano.' },
     bagnato: { kind: 'ice', name: 'Pavimento bagnato', icon: '⚠️', desc: 'Scivoloso: palla e pedine frenano pochissimo.' },
-    irrigatore: { kind: 'sprinkler', name: 'Irrigatore', icon: '🚿', desc: 'A intervalli bagna una zona, che resta scivolosa per 2 turni.' },
     cono: { kind: 'post', name: 'Coni', icon: '🔶', r: 12, desc: 'Ostacoli fissi. Si abbattono al terzo colpo.' },
     sasso: { kind: 'post', name: 'Sassi', icon: '🪨', r: 15, desc: 'Ostacoli fissi. Si spaccano al terzo colpo.' },
     bidone: { kind: 'post', name: 'Bidoni', icon: '🗑️', r: 17, desc: 'Ostacoli fissi. Si ribaltano al terzo colpo.' },
@@ -110,7 +110,7 @@
   };
 
   const ROUND_NAMES = ['Quarti di finale', 'Semifinale', 'Finale'];
-  const DIFF_IDX = { facile: 0, normale: 1, difficile: 2 };
+  const DIFF_IDX = { normale: 2, difficile: 3, estremo: 4 };
 
   // =====================================================================
   // Utilità
@@ -151,6 +151,7 @@
     try { return Object.assign({}, DEFAULTS, JSON.parse(localStorage.getItem('cdt-settings') || '{}')); }
     catch (e) { return Object.assign({}, DEFAULTS); }
   })();
+  if (!(settings.diff in { normale: 1, difficile: 1, estremo: 1 })) settings.diff = 'normale';
   function saveSettings() {
     try { localStorage.setItem('cdt-settings', JSON.stringify(settings)); } catch (e) { /* ignorato */ }
   }
@@ -168,7 +169,7 @@
     inv: [[], []], fx: [newFx(), newFx()],
     tokens: [], obstacles: [], solids: [], wind: null, invader: null,
     cards: [], lastShot: null, floats: [],
-    shotCount: 0, turnCount: 0, sinceGold: 0,
+    shotCount: 0, turnCount: 0, sinceGold: 0, shake: 0,
   };
   let M = null;                       // configurazione della partita in corso
   let FIELD = FIELDS.erba, FIELD_ID = 'erba', BALL = BALLS.classico;
@@ -282,7 +283,7 @@
         list.push(makeBody(x, py, DISC_R, 1, DISC_FRICTION, { team, gk: i === 0 }));
       });
     }
-    list.push(makeBody(CX, CY, BALL_R, 0.45, BALL_FRICTION, { isBall: true, attached: -1, ax: 0, ay: -1, mh: 0 }));
+    list.push(makeBody(CX, CY, BALL_R, BALL_MASS, BALL_FRICTION, { isBall: true, attached: -1, ax: 0, ay: -1, mh: 0 }));
     setBodies(list);
     LW.hold = false; LW.dribble = false;
     applyStatus();
@@ -338,7 +339,7 @@
     for (const o of S.obstacles) {
       const k = OBST[o.type].kind;
       if (k === 'slow' && inEllipse(b, o)) m *= 3;
-      else if ((k === 'ice' || (k === 'sprinkler' && o.on)) && inEllipse(b, o)) m *= 0.28;
+      else if (k === 'ice' && inEllipse(b, o)) m *= 0.28;
     }
     return m;
   }
@@ -396,6 +397,7 @@
       const sp = Math.hypot(disc.vx, disc.vy) || 1;
       bl.ax = disc.vx / sp; bl.ay = disc.vy / sp;
       if (!Wd.sim) { onBallTouch(disc); Sfx.hit(400); }
+      if (Wd.team === disc.team) Wd.touched = true;
       return;
     }
     if (involvesDribble(Wd, a) || involvesDribble(Wd, b)) bl.attached = -1;
@@ -409,6 +411,13 @@
     a.vx -= j * nx * ia; a.vy -= j * ny * ia;
     b.vx += j * nx * ib; b.vy += j * ny * ib;
     if (a.isBall || b.isBall) bl.spin = 0;
+    // Palla di piombo: la pedina pesante rende pesante anche la palla per il resto del tiro.
+    if (disc && disc.heavy && disc.i === Wd.shooter && !bl.heavy) {
+      bl.heavy = true; bl.m = HEAVY_BALL_MASS;
+      if (!Wd.sim) Sfx.thud();
+    }
+    if (!Wd.sim && (a.heavy || b.heavy) && -rv > 250) S.shake = Math.min(9, -rv / 90);
+    if (disc && Wd.team === disc.team) Wd.touched = true;
     // Tiro a giro: al primo contatto tra la pedina tirata e la palla si sceglie la curva.
     if (disc && Wd.giro && disc.i === Wd.shooter) { Wd.giro = false; if (!Wd.sim) S.curveReq = true; }
     if (!Wd.sim) onImpact(a, b, -rv);
@@ -559,17 +568,17 @@
   }
   function simulateShot(idx, vx, vy, maxT, opts) {
     const list = LW.bodies.map((b) => Object.assign({}, b));
-    const Wd = { bodies: list, ball: list[list.length - 1], sim: true, shooter: idx, dribble: opts.dribble, hold: opts.hold };
+    const Wd = { bodies: list, ball: list[list.length - 1], sim: true, shooter: idx, team: list[idx].team, dribble: opts.dribble, hold: opts.hold, touched: false };
     const d = list[idx];
     d.vx = vx; d.vy = vy;
-    if (opts.heavy) d.m = 3;
+    if (opts.heavy) { d.m = HEAVY_MASS; d.heavy = true; }
     if (Wd.ball.attached >= 0 && Wd.ball.attached !== idx) Wd.ball.attached = -1;
     return runSim(Wd, d, maxT);
   }
   // Prosegue il tiro in corso con un certo effetto sulla palla (anteprima della curva).
   function simulateCurve(spin, maxT) {
     const list = LW.bodies.map((b) => Object.assign({}, b));
-    const Wd = { bodies: list, ball: list[list.length - 1], sim: true, shooter: LW.shooter, dribble: false, hold: false };
+    const Wd = { bodies: list, ball: list[list.length - 1], sim: true, shooter: LW.shooter, team: S.turn, dribble: false, hold: false, touched: S.touched };
     Wd.ball.spin = spin;
     return runSim(Wd, list[LW.shooter], maxT);
   }
@@ -587,7 +596,7 @@
       if (list.every((b) => Math.hypot(b.vx, b.vy) < 5)) break;
     }
     const moved = Math.hypot(Wd.ball.x - b0.x, Wd.ball.y - b0.y) > 4;
-    return { dp, bp, goal, ball: Wd.ball, moved };
+    return { dp, bp, goal, ball: Wd.ball, moved, touched: Wd.touched, list };
   }
 
   // =====================================================================
@@ -621,7 +630,7 @@
   function canSpawn(type) {
     const k = OBST[type].kind;
     if (type === 'invasore') return false;
-    if (['wind', 'slope', 'manhole', 'barrier', 'sprinkler'].includes(k)) return !S.obstacles.some((o) => o.type === type);
+    if (['wind', 'slope', 'manhole', 'barrier'].includes(k)) return !S.obstacles.some((o) => o.type === type);
     if (k === 'slow' || k === 'ice') return S.obstacles.filter((o) => ['slow', 'ice'].includes(OBST[o.type].kind)).length < 2;
     if (k === 'post') return S.obstacles.filter((o) => OBST[o.type].kind === 'post').length < 4;
     return true;
@@ -633,7 +642,7 @@
     S.tokens.every((t) => Math.hypot(t.x - x, t.y - y) > TOKEN_R + r + 10);
   const zoneClear = (x, y, dist) => S.obstacles.every((o) => {
     const k = OBST[o.type].kind;
-    if (!['slow', 'ice', 'sprinkler', 'slope'].includes(k)) return true;
+    if (!['slow', 'ice', 'slope'].includes(k)) return true;
     return Math.hypot(o.x - x, o.y - y) > dist;
   });
 
@@ -641,11 +650,10 @@
     const k = OBST[type].kind;
     const life = 7 + Math.floor(Math.random() * 4);
     const shape = Array.from({ length: 10 }, () => rand(0.86, 1.1));
-    if (k === 'slow' || k === 'ice' || k === 'sprinkler') {
+    if (k === 'slow' || k === 'ice') {
       const x = rand(F.l + 110, F.r - 110), y = rand(270, 730);
       if (!zoneClear(x, y, 170)) return null;
-      const big = k === 'sprinkler';
-      return { type, x, y, rx: big ? 90 : rand(60, 85), ry: big ? 72 : rand(44, 64), shape, life, on: false, timer: 0 };
+      return { type, x, y, rx: rand(60, 85), ry: rand(44, 64), shape, life };
     }
     if (k === 'post') {
       const r = OBST[type].r;
@@ -727,7 +735,6 @@
       o.life--;
       if (o.type === 'sagome') o.phase += 1.15;
       if (o.type === 'vento') rerollWind(o);
-      if (o.type === 'irrigatore') { o.timer++; o.on = o.timer % 4 === 1 || o.timer % 4 === 2; }
     }
     S.obstacles = S.obstacles.filter((o) => o.life > 0);
     rebuildSolids();
@@ -875,6 +882,10 @@
   // =====================================================================
   function startMatch(cfg) {
     M = cfg;
+    // Ogni partita parte a campo intero; il pulsante in alto riporta alla vista normale.
+    settings.full = true;
+    saveSettings();
+    nativeFullscreen(true);
     FIELD_ID = M.field; FIELD = FIELDS[M.field]; BALL = BALLS[M.ball];
     TEAMS = buildTeams(M.teams[0], M.teams[1]);
     Object.assign(S, {
@@ -923,7 +934,7 @@
     const team = S.turn, fx = S.fx[team];
     S.lastShot = { team, snap: takeSnap(), scored: false };
     if (ball.attached >= 0 && ball.attached !== disc.i) ball.attached = -1;
-    disc.m = fx.piombo > 0 || fx.piomboTurn ? 3 : 1;
+    disc.m = fx.piombo > 0 || fx.piomboTurn ? HEAVY_MASS : 1;
     disc.heavy = disc.m > 1;
     fx.piombo = 0;
     LW.giro = fx.giro;
@@ -949,6 +960,7 @@
     const d = S.shooterDisc;
     if (d) { d.m = 1; d.heavy = false; }
     ball.spin = 0;
+    ball.m = BALL_MASS; ball.heavy = false;
     LW.giro = false;
     if (ball.attached >= 0 && !LW.hold) ball.attached = -1;
     LW.dribble = false;
@@ -1059,10 +1071,10 @@
     const lvl = skillFrom(M.skillD);
     let best = 0, bestSc = -Infinity;
     for (const v of [-1, -0.6, -0.3, 0, 0.3, 0.6, 1]) {
-      const sc = evalOutcome(simulateCurve(v * curveMax(), 4), team);
+      const sc = evalOutcome(simulateCurve(v * curveMax(), 4), team, lvl.strat, S.shot < S.maxShots);
       if (sc > bestSc) { bestSc = sc; best = v; }
     }
-    return clamp(best + (Math.random() * 2 - 1) * lvl.err * 3, -1, 1);
+    return clamp(best + (Math.random() * 2 - 1) * lvl.err * 4, -1, 1);
   }
 
   function update(dt) {
@@ -1102,13 +1114,16 @@
   // =====================================================================
   // CPU
   // =====================================================================
+  // Livello CPU: 2 = Normale, 3 = Difficile, 4 = Estremo (il torneo può andare un po' sopra o sotto).
+  // err/pow: imprecisione di mira e potenza; depth: quanti tiri simula; strat: quanto pensa alla risposta avversaria.
   function skillFrom(d) {
-    d = clamp(d, 0, 2.8);
-    if (d >= 2) return { err: Math.max(0.012, 0.028 - (d - 2) * 0.02), pow: Math.max(0.03, 0.05 - (d - 2) * 0.025), think: 650 };
-    const errs = [0.13, 0.065, 0.028], pows = [0.18, 0.1, 0.05], thinks = [950, 800, 650];
-    const i = Math.floor(d), f = d - i;
-    const L = (a) => a[i] + (a[i + 1] - a[i]) * f;
-    return { err: L(errs), pow: L(pows), think: L(thinks) };
+    d = clamp(d, 1.5, 4.6);
+    const T = [[1.5, 0.045, 0.075, 4], [2, 0.03, 0.05, 6], [3, 0.015, 0.032, 16], [4, 0.006, 0.016, 40], [4.6, 0.004, 0.01, 50]];
+    let i = 0;
+    while (i < T.length - 2 && d > T[i + 1][0]) i++;
+    const a = T[i], b = T[i + 1], f = (d - a[0]) / (b[0] - a[0]);
+    const L = (k) => a[k] + (b[k] - a[k]) * f;
+    return { err: L(1), pow: L(2), depth: Math.round(L(3)), strat: clamp((d - 2) / 2, 0, 1), think: 750 };
   }
 
   function cpuStep() {
@@ -1186,17 +1201,30 @@
     return false;
   }
 
-  function cpuCandidates(team) {
+  function cpuCandidates(team, rich) {
     const attackY = team === 0 ? F.t - 20 : F.b + 20;
     const forward = team === 0 ? -1 : 1;
     const ballToGoal = Math.hypot(CX - ball.x, attackY - ball.y);
+    const targets = [
+      { type: 'goal', x: CX + (Math.random() - 0.5) * 60, y: attackY },
+      { type: 'clear', x: ball.x + (ball.x - CX) * 0.4, y: ball.y + forward * 420 },
+    ];
+    if (rich) {
+      targets.push(
+        { type: 'goal', x: MOUTH.l + 28, y: attackY },
+        { type: 'goal', x: MOUTH.r - 28, y: attackY },
+        // Tiri di sponda: si mira al riflesso della porta sulle pareti laterali
+        { type: 'bank', x: 2 * (F.l + BALL_R) - CX, y: attackY },
+        { type: 'bank', x: 2 * (F.r - BALL_R) - CX, y: attackY },
+        // Appoggi: palla avanti verso le fasce, per preparare il tiro dopo
+        { type: 'clear', x: F.l + 90, y: ball.y + forward * 260 },
+        { type: 'clear', x: F.r - 90, y: ball.y + forward * 260 },
+        { type: 'clear', x: ball.x, y: ball.y + forward * 160 },
+      );
+    }
     const out = [];
     for (const d of discs) {
       if (d.team !== team || d.frozen) continue;
-      const targets = [
-        { type: 'goal', x: CX + (Math.random() - 0.5) * 100, y: attackY },
-        { type: 'clear', x: ball.x + (ball.x - CX) * 0.4, y: ball.y + forward * 420 },
-      ];
       for (const tgt of targets) {
         let gx = tgt.x - ball.x, gy = tgt.y - ball.y;
         const gl = Math.hypot(gx, gy) || 1;
@@ -1221,20 +1249,72 @@
 
   function shotSpeed(c, heavy, dribble) {
     if (dribble) return speedFor(c.dist + Math.min(c.gl, 520), 0, effFric(DISC_FRICTION));
-    const ballDist = c.tgt.type === 'goal' ? c.gl + 60 : 380;
+    const ballDist = c.tgt.type === 'goal' ? c.gl + 60 : c.tgt.type === 'bank' ? c.gl + 90 : Math.min(c.gl, 380);
     const ballSpeed = speedFor(ballDist, 0, effFric(BALL_FRICTION));
-    const contact = Math.min(MAX_SPEED, ballSpeed / ((heavy ? 1.65 : 1.31) * c.cut));
+    const contact = Math.min(MAX_SPEED, ballSpeed / ((heavy ? 1.74 : 1.31) * c.cut));
     return speedFor(c.dist, contact, effFric(DISC_FRICTION));
   }
 
-  function evalOutcome(sim, team) {
+  // Quanto è pericolosa la posizione per la squadra "team" se tocca all'avversario.
+  function threat(list, b, team) {
+    const ownY = team === 0 ? F.b : F.t;
+    let gx = CX - b.x, gy = ownY - b.y;
+    const gl = Math.hypot(gx, gy) || 1;
+    gx /= gl; gy /= gl;
+    let worst = 0;
+    for (const o of list) {
+      if (o.isBall || o.team === team || o.frozen) continue;
+      if (o.gk && !o.flying) continue;
+      const dx = b.x - o.x, dy = b.y - o.y, d = Math.hypot(dx, dy) || 1;
+      const cut = (dx * gx + dy * gy) / d;
+      if (cut < 0.25) continue;
+      worst = Math.max(worst, cut * clamp(1 - d / 700, 0, 1) * clamp(1.15 - gl / 800, 0, 1));
+    }
+    return worst * 700;
+  }
+
+  function evalOutcome(sim, team, strat = 0, keep = true) {
     if (sim.goal === team) return 1000;
     if (sim.goal === 1 - team) return -1000;
     const b = sim.ball;
     const oppY = team === 0 ? F.t : F.b, ownY = team === 0 ? F.b : F.t;
     let s = -Math.hypot(b.x - CX, b.y - oppY) * 0.6 + Math.hypot(b.x - CX, b.y - ownY) * 0.3;
     if (!sim.moved) s -= 300;
+    if (strat > 0) {
+      // Strategia: tenere il possesso vale molto; se il turno passa, conta cosa può fare l'avversario.
+      if (sim.touched && keep) s += 60 + 140 * strat;
+      else s -= threat(sim.list, b, team) * (0.3 + 0.7 * strat);
+      // La pedina che ha tirato non deve restare in mezzo davanti alla propria porta lasciandola sguarnita
+      const gk = sim.list.find((o) => o.gk && o.team === team);
+      if (gk && Math.hypot(gk.x - CX, gk.y - ownY) > AREA_H + 60) s -= 120 * strat;
+    }
     return s;
+  }
+
+  // Livello Estremo: rifinisce angolo e potenza dei tiri migliori, poi sceglie quello
+  // che funziona anche con il piccolo errore di esecuzione (non solo nel caso perfetto).
+  function cpuRefine(team, tried, lvl, opts, keep) {
+    const run = (p) => evalOutcome(simulateShot(p.disc.i, Math.cos(p.ang) * p.speed, Math.sin(p.ang) * p.speed, 4, opts), team, lvl.strat, keep);
+    const pool = tried.sort((a, b) => b.sc - a.sc).slice(0, 6);
+    for (const p of pool.slice()) {
+      for (const da of [-0.05, -0.025, 0.025, 0.05]) {
+        for (const k of [0.92, 1, 1.08]) {
+          const q = { disc: p.disc, ang: p.ang + da, speed: Math.min(MAX_SPEED, p.speed * k) };
+          q.sc = run(q);
+          pool.push(q);
+        }
+      }
+    }
+    let best = null;
+    for (const p of pool.sort((a, b) => b.sc - a.sc).slice(0, 4)) {
+      let tot = p.sc;
+      for (const s of [-1, 1]) {
+        tot += run({ disc: p.disc, ang: p.ang + s * lvl.err * 2.5, speed: p.speed * (1 + s * lvl.pow) });
+      }
+      const exp = tot / 3;
+      if (!best || exp > best.exp) best = Object.assign({}, p, { exp });
+    }
+    return best;
   }
 
   function cpuPlan(team) {
@@ -1242,20 +1322,28 @@
     const fx = S.fx[team];
     const heavy = fx.piombo > 0 || fx.piomboTurn;
     const dribble = fx.dribble > 0;
-    const cands = cpuCandidates(team);
-    const build = (c) => ({ disc: c.d, ang: Math.atan2(c.dir.y, c.dir.x), speed: shotSpeed(c, heavy, dribble) });
+    // Con il laser la CPU "vede" meglio: simula più tiri e sbaglia meno.
+    const depth = fx.laser > 0 ? Math.max(lvl.depth, 16) : lvl.depth;
+    const rich = depth > 6;
+    const cands = cpuCandidates(team, rich);
+    const opts = simOpts(team);
+    const keep = S.shot < S.maxShots;
     let pick = null;
-    if (cands.length && fx.laser > 0) {
-      // Con il laser la CPU "vede" l'esito: prova diversi tiri e sceglie il migliore.
-      for (const c of cands.slice(0, 6)) {
-        const p = build(c);
-        const sim = simulateShot(p.disc.i, Math.cos(p.ang) * p.speed, Math.sin(p.ang) * p.speed, 4, simOpts(team));
-        const sc = evalOutcome(sim, team);
-        if (!pick || sc > pick.sc) pick = Object.assign(p, { sc });
+    const tried = [];
+    // La CPU prova i tiri migliori sul motore fisico e sceglie quello con l'esito migliore.
+    for (const c of cands.slice(0, depth)) {
+      const base = shotSpeed(c, heavy, dribble);
+      const ang = Math.atan2(c.dir.y, c.dir.x);
+      for (const k of rich ? [0.85, 1, 1.18] : [1]) {
+        const speed = Math.min(MAX_SPEED, base * k);
+        const sim = simulateShot(c.d.i, Math.cos(ang) * speed, Math.sin(ang) * speed, 4, opts);
+        const sc = evalOutcome(sim, team, lvl.strat, keep) + c.score * 15;
+        if (!pick || sc > pick.sc) pick = { disc: c.d, ang, speed, sc };
+        if (lvl.strat >= 0.75) tried.push({ disc: c.d, ang, speed, sc, cs: c.score });
       }
-    } else if (cands.length) {
-      pick = build(cands[0]);
-    } else {
+    }
+    if (pick && lvl.strat >= 0.75) pick = cpuRefine(team, tried, lvl, opts, keep) || pick;
+    if (!pick) {
       // Nessun tiro pulito: colpisci la palla con la pedina più vicina che può arrivarci.
       const usable = discs.filter((d) => d.team === team && !d.frozen && (!d.gk || gkCanReach(d, ball)));
       const d = usable.reduce((a, b) => (Math.hypot(b.x - ball.x, b.y - ball.y) < Math.hypot(a.x - ball.x, a.y - ball.y) ? b : a));
@@ -1452,14 +1540,12 @@
           g.fillStyle = train ? (i % 2 ? '#3d944c' : '#46a456') : (i % 2 ? '#2b8a3e' : '#319a45');
           g.fillRect(F.l, F.t + i * bh, fw, bh + 0.5);
         }
+        speckles(g, R, 1400, F.l, F.t, fw, fh, train ? ['#3b9a4b', '#36894a'] : ['#2f9443', '#27803a'], 1, 2, 0.5);
         if (train) {
-          g.fillStyle = 'rgba(122,86,46,0.38)';
-          for (const [x, y, rx, ry] of [[CX, F.t + 60, 95, 40], [CX, F.b - 60, 95, 40], [CX, CY, 70, 55]]) {
-            g.beginPath(); g.ellipse(x, y, rx, ry, 0, 0, TAU); g.fill();
-          }
-          for (let i = 0; i < 9; i++) { g.beginPath(); g.ellipse(F.l + 30 + R() * (fw - 60), F.t + 80 + R() * (fh - 160), 10 + R() * 22, 8 + R() * 14, R() * 3, 0, TAU); g.fill(); }
-        } else {
-          speckles(g, R, 1400, F.l, F.t, fw, fh, ['#2f9443', '#27803a'], 1, 2, 0.5);
+          // Righe di allenamento tracciate in giallo tra le aree
+          g.strokeStyle = 'rgba(250,204,21,0.35)'; g.lineWidth = 2; g.setLineDash([10, 10]);
+          for (const x of [F.l + 135, F.r - 135]) { g.beginPath(); g.moveTo(x, F.t + AREA_H + 20); g.lineTo(x, F.b - AREA_H - 20); g.stroke(); }
+          g.setLineDash([]);
         }
         break;
       }
@@ -1658,6 +1744,11 @@
     g.fillStyle = 'rgba(0,0,0,0.35)';
     dot(g, ball.x + 2, ball.y + 4, ball.r);
     drawBallSprite(g, ball.x, ball.y, ball.r, ball.rot, BALL);
+    if (ball.heavy) {
+      g.fillStyle = 'rgba(75,85,99,0.55)'; dot(g, ball.x, ball.y, ball.r);
+      g.strokeStyle = '#d1d5db'; g.lineWidth = 3;
+      g.beginPath(); g.arc(ball.x, ball.y, ball.r + 2, 0, TAU); g.stroke();
+    }
   }
 
   function drawTokens(g, t) {
@@ -1731,21 +1822,6 @@
           g.beginPath(); g.moveTo(o.x + o.rx * 0.65, o.y - o.ry * 0.95); g.lineTo(o.x + o.rx * 0.65 - 11, o.y - o.ry * 0.95 + 18); g.lineTo(o.x + o.rx * 0.65 + 11, o.y - o.ry * 0.95 + 18); g.closePath(); g.fill(); g.stroke();
           g.fillStyle = '#1f2937'; g.font = '900 11px system-ui, sans-serif'; g.textAlign = 'center'; g.textBaseline = 'middle';
           g.fillText('!', o.x + o.rx * 0.65, o.y - o.ry * 0.95 + 11);
-          break;
-        case 'irrigatore':
-          if (o.on) {
-            g.fillStyle = 'rgba(96,165,250,0.38)'; blobPath(g, o, 1); g.fill();
-            g.fillStyle = 'rgba(219,234,254,0.9)';
-            for (let k = 0; k < 14; k++) {
-              const a = k * 0.45 + t * 2.2, rr = ((t * 1.3 + k * 0.13) % 1);
-              dot(g, o.x + Math.cos(a) * o.rx * rr, o.y + Math.sin(a) * o.ry * rr, 2);
-            }
-          } else {
-            g.strokeStyle = 'rgba(147,197,253,0.35)'; g.setLineDash([4, 6]); g.lineWidth = 1.5;
-            blobPath(g, o, 1); g.stroke(); g.setLineDash([]);
-          }
-          g.fillStyle = '#4b5563'; dot(g, o.x, o.y, 7);
-          g.fillStyle = o.on ? '#60a5fa' : '#9ca3af'; dot(g, o.x, o.y, 3.5);
           break;
         case 'cono':
           g.fillStyle = 'rgba(0,0,0,0.3)'; dot(g, o.x + 2, o.y + 4, o.r);
@@ -1972,8 +2048,12 @@
 
   function render(t) {
     ctx.setTransform(1, 0, 0, 1, 0, 0);
-    if (pitch) ctx.drawImage(pitch, 0, 0);
+    let sx = 0, sy = 0;
+    if (S.shake > 0.3) { sx = (Math.random() - 0.5) * S.shake * 2 * dpr; sy = (Math.random() - 0.5) * S.shake * 2 * dpr; S.shake *= 0.86; }
+    else S.shake = 0;
+    if (pitch) ctx.drawImage(pitch, sx, sy);
     viewTransform(ctx);
+    ctx.translate(sx / (canvas.width / VIEW.w), sy / (canvas.height / VIEW.h));
     if (!ball) return;
 
     drawObstacles(ctx, t);
@@ -2173,6 +2253,7 @@
     crack() { this.noise(0.25, 0.3, 500, 0.8); },
     plop() { this.tone(300, 0.15, 'sine', 0.2, 120); },
     crowd() { this.noise(1.2, 0.12, 900, 0.5); },
+    thud() { this.tone(110, 0.35, 'sine', 0.35, 45); this.noise(0.2, 0.25, 300, 0.7); },
   };
 
   // =====================================================================
@@ -2258,7 +2339,7 @@
       mode: 'tour', rules: settings.rules, teams: [T.team, opp],
       field: settings.field === 'casuale' ? pickOne(FIELD_IDS) : settings.field,
       ball: settings.ball, target: Number(settings.target), round: T.round,
-      skillD: DIFF_IDX[settings.diff] + T.round * 0.4 + (NATIONS[opp].rating - 4) * 0.3,
+      skillD: DIFF_IDX[settings.diff] + T.round * 0.3 + (NATIONS[opp].rating - 4) * 0.25,
     });
   }
 
@@ -2484,15 +2565,18 @@
     else startMatch(Object.assign({}, M));
   });
   $('overMenuBtn').addEventListener('click', openHome);
+  // Su browser che lo permettono, prova anche il vero schermo intero del telefono.
+  function nativeFullscreen(on) {
+    try {
+      const de = document.documentElement;
+      if (on && de.requestFullscreen && !document.fullscreenElement) de.requestFullscreen().catch(() => {});
+      else if (!on && document.fullscreenElement) document.exitFullscreen().catch(() => {});
+    } catch (e) { /* ignorato */ }
+  }
   $('fullBtn').addEventListener('click', () => {
     settings.full = !settings.full;
     saveSettings();
-    // Su browser che lo permettono, prova anche il vero schermo intero.
-    try {
-      const de = document.documentElement;
-      if (settings.full && de.requestFullscreen && !document.fullscreenElement) de.requestFullscreen().catch(() => {});
-      else if (!settings.full && document.fullscreenElement) document.exitFullscreen().catch(() => {});
-    } catch (e) { /* ignorato */ }
+    nativeFullscreen(settings.full);
     resize();
   });
   $('soundBtn').addEventListener('click', () => {
@@ -2535,6 +2619,7 @@
   requestAnimationFrame(frame);
 
   // Hook per i test automatici.
+  window.__step = (dt) => { physicsStep(LW, dt); update(dt); };
   window.__game = {
     S, settings, ITEMS, OBST, FIELDS, LW,
     get ball() { return ball; }, get discs() { return discs; }, get M() { return M; }, get T() { return T; },
