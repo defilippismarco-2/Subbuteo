@@ -18,32 +18,49 @@
     <header id="hud">
       <button id="menuBtn" class="icon-btn" aria-label="Pausa">❚❚</button>
       <div class="score">
-        <span class="team t0"><i></i><span id="n0">Blu</span></span>
+        <span class="team"><img id="f0" alt=""><span id="n0">ITA</span></span>
         <b id="s0">0</b><span class="dash">–</span><b id="s1">0</b>
-        <span class="team t1"><span id="n1">Rossi</span><i></i></span>
+        <span class="team"><span id="n1">BRA</span><img id="f1" alt=""></span>
       </div>
       <button id="soundBtn" class="icon-btn" aria-label="Audio">🔊</button>
     </header>
+
+    <div id="strip1" class="strip" hidden></div>
 
     <main id="stage">
       <canvas id="c"></canvas>
       <div id="banner"></div>
     </main>
 
+    <div id="strip0" class="strip" hidden></div>
+
     <footer id="status"><span id="statusText">&nbsp;</span><span id="shots"></span></footer>
   </div>
 
   <!-- Menu principale -->
-  <section id="menu" class="overlay show">
+  <section id="home" class="overlay show">
     <div class="card">
       <h1>Calcio<br><span>da Tavolo</span></h1>
       <p class="sub">Calcio a punta di dito, in verticale</p>
+      <button id="homeCpu" class="primary">Amichevole</button>
+      <button id="home2p">2 giocatori</button>
+      <button id="homeTour">Torneo</button>
+      <button id="homeContinue" hidden>Continua torneo</button>
+      <button id="homeLegend" class="ghost">Legenda</button>
+    </div>
+  </section>
+
+  <!-- Impostazioni partita -->
+  <section id="setup" class="overlay">
+    <div class="card wide">
+      <h2 id="setupTitle">Amichevole</h2>
+      <div id="teamPickers"></div>
 
       <div class="group">
-        <label>Modalità</label>
-        <div class="seg" data-key="mode">
-          <button data-v="cpu">1 giocatore</button>
-          <button data-v="2p">2 giocatori</button>
+        <label>Regole</label>
+        <div class="seg" data-key="rules">
+          <button data-v="classica">Classica</button>
+          <button data-v="poteri">Con poteri</button>
         </div>
       </div>
       <div class="group" id="diffGroup">
@@ -62,18 +79,35 @@
           <button data-v="7">7</button>
         </div>
       </div>
+      <div class="group">
+        <label>Campo</label>
+        <div id="fieldGrid" class="tiles"></div>
+      </div>
+      <div class="group">
+        <label>Pallone</label>
+        <div id="ballGrid" class="tiles balls"></div>
+      </div>
 
-      <button id="playBtn" class="primary">Gioca</button>
+      <button id="startBtn" class="primary">Gioca</button>
+      <button id="setupBack" class="ghost">Indietro</button>
+    </div>
+  </section>
 
-      <details class="rules">
-        <summary>Come si gioca</summary>
-        <ul>
-          <li><b>Trascina all'indietro</b> una tua pedina e rilascia per tirare, come una fionda. Più trascini, più forte tiri.</li>
-          <li>Se una tua pedina tocca la palla, <b>tiri ancora</b> (massimo 3 tiri per turno). Altrimenti tocca all'avversario.</li>
-          <li>Il portiere (maglia gialla o verde) <b>non può uscire</b> dalla sua area di rigore.</li>
-          <li>Dopo un gol, batte il calcio d'inizio chi ha subito il gol.</li>
-        </ul>
-      </details>
+  <!-- Tabellone torneo -->
+  <section id="bracket" class="overlay">
+    <div class="card wide">
+      <h2 id="bracketTitle">Torneo</h2>
+      <div id="bracketBody"></div>
+      <button id="bracketPlay" class="primary">Gioca</button>
+      <button id="bracketMenu" class="ghost">Menu principale</button>
+    </div>
+  </section>
+
+  <!-- Legenda -->
+  <section id="legend" class="overlay">
+    <div class="card wide legend">
+      <div class="legend-head"><h2>Legenda</h2><button id="legendClose" class="icon-btn" aria-label="Chiudi">✕</button></div>
+      <div id="legendBody"></div>
     </div>
   </section>
 
@@ -82,8 +116,9 @@
     <div class="card">
       <h2>Pausa</h2>
       <button id="resumeBtn" class="primary">Riprendi</button>
+      <button id="pauseLegend">Legenda</button>
       <button id="restartBtn">Ricomincia partita</button>
-      <button id="quitBtn">Menu principale</button>
+      <button id="quitBtn" class="ghost">Menu principale</button>
     </div>
   </section>
 
@@ -93,7 +128,7 @@
       <h2 id="overTitle">Fine</h2>
       <p id="overScore" class="big"></p>
       <button id="againBtn" class="primary">Rivincita</button>
-      <button id="overMenuBtn">Menu principale</button>
+      <button id="overMenuBtn" class="ghost">Menu principale</button>
     </div>
   </section>
 

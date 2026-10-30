@@ -3,22 +3,55 @@
 Calcio a punta di dito per smartphone, pensato per giocare **in verticale**.
 HTML5 + Canvas, senza dipendenze né build: basta aprire `index.html`.
 
-## Come si gioca
-- **Trascina all'indietro** una tua pedina e rilascia per tirare (effetto fionda). Più trascini, più forte tiri; la linea tratteggiata mostra fin dove arriva la pedina.
-- Se una tua pedina tocca la palla **tiri ancora**, fino a 3 tiri per turno. Altrimenti il turno passa all'avversario.
-- Il portiere (maglia gialla / verde) non può uscire dalla propria area di rigore.
-- Dopo un gol batte il calcio d'inizio chi l'ha subito. Vince chi arriva prima a 3, 5 o 7 gol.
+## Modalità
+- **Amichevole** contro la CPU (Facile / Normale / Difficile), scegliendo la tua nazionale e l'avversario.
+- **2 giocatori** sullo stesso telefono.
+- **Torneo** a eliminazione diretta con 8 nazionali (quarti, semifinale, finale). Scegli una sola nazionale e la tieni per tutto il torneo; la CPU diventa più forte a ogni turno. Il torneo resta salvato nel browser.
 
-Modalità: **1 giocatore** contro la CPU (Facile / Normale / Difficile) oppure **2 giocatori** sullo stesso telefono.
+Nazionali: Brasile, Giappone, Italia, Argentina, Francia, Inghilterra, Olanda, Spagna, Germania, Portogallo.
+Campi: Erba, Terra, Indoor, Street, Neve, Allenamento (o Casuale). Ogni campo ha un attrito diverso.
+Palloni: Classico, Retrò, Neon, Invernale, Futsal, Galassia. La linea di mira prende il colore del pallone.
+
+## Regole base
+- Trascina all'indietro una tua pedina e rilascia per tirare. La linea tratteggiata mostra metà della corsa.
+- Se una tua pedina tocca la palla tiri ancora, fino a 3 tiri per turno.
+- Il portiere non può uscire dalla sua area.
+
+## Regole "Con poteri"
+Oggetti in campo: li prende chi ci passa sopra con una pedina o ci manda sopra la palla (massimo 2 in tasca).
+Ogni oggetto ha 1 possibilità su 6 di essere d'oro, e almeno uno ogni 10 lo è.
+
+| Oggetto | Effetto | Oro |
+|---|---|---|
+| Fiato | 4 tiri nel turno | 5 tiri |
+| Palla di piombo | La pedina pesa il triplo per un tiro | Tutto il turno |
+| Tiro a giro | Dopo la mira, trascina di lato per curvare | Curva anche la palla |
+| Laser | Mostra il percorso della palla dopo l'impatto e allunga la mira del 60% | +100%, per 2 tiri |
+| Dribbling | La palla resta attaccata alla pedina per un tiro | 2 tiri, la palla resta incollata |
+| Cartellino giallo | Una pedina avversaria resta ferma nel suo prossimo turno | Due pedine |
+| Portiere volante | Il portiere può uscire dall'area per il turno | Anche il turno dopo |
+| VAR | Annulla l'ultimo tiro avversario | Annulla anche un gol |
+
+Ostacoli per campo (compaiono e spariscono durante la partita):
+
+| Campo | Ostacoli |
+|---|---|
+| Erba | Fango, irrigatore, vento, invasore di campo |
+| Terra | Fango, sassi, vento, pendenza, cane in campo |
+| Indoor | Pavimento bagnato, coni, barriera di sagome, invasore |
+| Street | Tombini, pozzanghere, bidoni, pendenza, vento, skater |
+| Neve | Ghiaccio, cumuli di neve, pupazzi di neve, vento |
+| Allenamento | Coni, barriera di sagome, irrigatore, vento |
+
+La CPU usa gli oggetti a tutti i livelli di difficoltà.
 
 ## Avvio in locale
 ```sh
 python3 -m http.server 8000
 # poi apri http://<ip-del-pc>:8000 dal telefono
 ```
-Pubblicandolo con GitHub Pages si può aggiungere alla schermata Home (manifest PWA incluso, orientamento verticale).
 
 ## File
 - `index.html` – struttura, menu e overlay
-- `style.css` – layout mobile (safe area, `100dvh`, avviso di rotazione)
-- `game.js` – fisica a passo fisso, turni, CPU, rendering, audio sintetizzato
+- `style.css` – layout mobile
+- `game.js` – fisica, turni, oggetti, ostacoli, CPU, torneo, rendering, audio

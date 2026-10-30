@@ -169,3 +169,90 @@ h2 { font-size: 28px; font-weight: 900; }
 @media (orientation: landscape) and (max-height: 520px) {
   #rotate { display: flex; }
 }
+
+/* ---------- Bandiere e punteggio ---------- */
+.team img { width: 22px; height: 15px; border-radius: 3px; box-shadow: 0 0 0 1px rgba(255,255,255,.3); object-fit: cover; }
+
+/* ---------- Strisce oggetti ---------- */
+.strip { display: flex; align-items: center; gap: 8px; padding: 2px 12px; min-height: 50px; }
+.strip[hidden] { display: none; }
+.strip .who { display: flex; align-items: center; gap: 6px; font-size: 12px; font-weight: 800; letter-spacing: .06em; color: #dbe7df; }
+.strip .who img { width: 24px; height: 16px; border-radius: 3px; box-shadow: 0 0 0 1px rgba(255,255,255,.3); }
+.strip .chips { flex: 1; display: flex; gap: 4px; flex-wrap: wrap; min-width: 0; font-size: 13px; }
+.strip .chips span { background: rgba(255,255,255,.1); border-radius: 8px; padding: 2px 6px; white-space: nowrap; }
+.slots { display: flex; gap: 6px; }
+.slot {
+  width: 46px; height: 46px; position: relative;
+  border-radius: 12px; border: 2px solid rgba(255,255,255,.28);
+  background: rgba(255,255,255,.12); color: #fff;
+  font-size: 22px; line-height: 1; cursor: pointer;
+  display: flex; align-items: center; justify-content: center;
+  font-family: "Apple Color Emoji", "Segoe UI Emoji", "Noto Color Emoji", system-ui, sans-serif;
+}
+.slot.empty { border-style: dashed; background: transparent; cursor: default; }
+.slot.gold { border-color: #fbbf24; box-shadow: 0 0 10px rgba(251,191,36,.55); }
+.slot small {
+  position: absolute; bottom: -6px; left: 50%; transform: translateX(-50%);
+  font: 900 8px/1.2 system-ui, sans-serif; color: #1c1a05; background: #fbbf24; border-radius: 4px; padding: 0 3px;
+}
+.slot.off { opacity: .45; }
+.slot.sel { outline: 3px solid #fff; outline-offset: 1px; }
+.slot:active:not(.empty) { transform: scale(.94); }
+
+/* ---------- Menu ---------- */
+.card.wide { width: min(480px, 100%); }
+.card > button.ghost { background: transparent; border: 1px solid rgba(255,255,255,.18); font-size: 15px; min-height: 44px; }
+.teams { display: grid; grid-template-columns: repeat(5, 1fr); gap: 6px; }
+.tbtn {
+  display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px;
+  min-height: 56px; padding: 6px 2px;
+  border-radius: 12px; border: 2px solid transparent;
+  background: rgba(255,255,255,.06); color: var(--text);
+  font: inherit; font-size: 11px; font-weight: 800; letter-spacing: .04em; cursor: pointer;
+}
+.tbtn img { width: 32px; height: 21px; border-radius: 3px; box-shadow: 0 0 0 1px rgba(255,255,255,.25); }
+.tbtn .rnd { font-size: 18px; line-height: 21px; }
+.tbtn.on { border-color: var(--accent); background: rgba(250,204,21,.13); }
+.tbtn.dis { opacity: .28; }
+.pick-name { font-size: 13px; color: var(--muted); margin: 6px 0 0 4px; min-height: 18px; }
+.tiles { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; }
+.tile {
+  display: flex; flex-direction: column; align-items: center; gap: 4px;
+  padding: 6px 4px; border-radius: 12px; border: 2px solid transparent;
+  background: rgba(255,255,255,.06); color: var(--text);
+  font: inherit; font-size: 11px; font-weight: 700; cursor: pointer; min-width: 0;
+}
+.tile canvas { width: 100%; max-width: 56px; aspect-ratio: 3 / 5; border-radius: 6px; display: block; }
+.tile .rnd { width: 100%; max-width: 56px; aspect-ratio: 3 / 5; border-radius: 6px; display: flex; align-items: center; justify-content: center; font-size: 22px; background: rgba(255,255,255,.08); }
+.tile.on { border-color: var(--accent); background: rgba(250,204,21,.13); }
+.tiles.balls { grid-template-columns: repeat(3, 1fr); }
+.tiles.balls canvas { width: 40px; aspect-ratio: 1; }
+.tile .sw { width: 60%; height: 4px; border-radius: 2px; }
+
+/* ---------- Tabellone ---------- */
+.round h3 { font-size: 12px; letter-spacing: .08em; text-transform: uppercase; color: var(--muted); margin: 10px 0 6px 4px; text-align: left; }
+.match {
+  display: grid; grid-template-columns: 1fr auto 1fr; align-items: center; gap: 8px;
+  padding: 8px 10px; border-radius: 10px; background: rgba(255,255,255,.05); margin-bottom: 6px;
+}
+.match.me { background: rgba(250,204,21,.12); box-shadow: inset 0 0 0 1px rgba(250,204,21,.55); }
+.match .t { display: flex; align-items: center; gap: 6px; font-weight: 700; font-size: 14px; min-width: 0; }
+.match .t.r { justify-content: flex-end; }
+.match .t img { width: 22px; height: 15px; border-radius: 2px; }
+.match .t.w { color: var(--accent); }
+.match .t.l { opacity: .55; }
+.match .res { font-variant-numeric: tabular-nums; font-weight: 900; min-width: 44px; text-align: center; }
+.tour-note { color: var(--muted); font-size: 14px; }
+
+/* ---------- Legenda ---------- */
+.legend { text-align: left; }
+.legend-head { display: flex; align-items: center; justify-content: space-between; }
+.legend h3 { font-size: 13px; letter-spacing: .1em; text-transform: uppercase; color: var(--accent); margin: 14px 0 4px; }
+.legend .intro { font-size: 13px; color: var(--muted); }
+.li { display: grid; grid-template-columns: 34px 1fr; gap: 10px; padding: 10px 0; border-bottom: 1px solid rgba(255,255,255,.08); }
+.li .ic { font-size: 24px; line-height: 1.2; font-family: "Apple Color Emoji", "Segoe UI Emoji", "Noto Color Emoji", sans-serif; }
+.li h4 { font-size: 16px; margin-bottom: 2px; }
+.li p { font-size: 13px; color: #cfdcd3; line-height: 1.45; }
+.li .gold { color: #fbbf24; font-weight: 800; }
+.li .where { font-size: 12px; color: var(--muted); margin-top: 3px; }
+#teamPickers { display: flex; flex-direction: column; gap: 12px; }
