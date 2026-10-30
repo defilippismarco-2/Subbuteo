@@ -77,7 +77,7 @@
     piombo: { name: 'Palla di piombo', icon: '⚫', w: 1,
       desc: 'Per un tiro la tua pedina pesa il triplo: travolge gli avversari, non si fa spostare e calcia più forte.', gold: 'vale per tutti i tiri del turno.' },
     giro: { name: 'Tiro a giro', icon: '🌀', w: 1,
-      desc: 'Dopo aver mirato, trascina a destra o a sinistra per dare l\'effetto: la pedina curva.', gold: 'dopo il contatto curva anche la palla.' },
+      desc: 'Tira normalmente: quando la pedina colpisce la palla il gioco si ferma e trascini a destra o a sinistra per far curvare la palla.', gold: 'la curva può essere il doppio più stretta.' },
     laser: { name: 'Laser', icon: '🎯', w: 1,
       desc: 'Mostra dove andrà la palla dopo l\'impatto, con i rimbalzi, e allunga la linea di mira del 60%.', gold: 'linea di mira lunga il doppio (+100%), per 2 tiri consecutivi.' },
     dribbling: { name: 'Dribbling', icon: '🧲', w: 1,
@@ -145,7 +145,7 @@
 
   const DEFAULTS = {
     mode: 'cpu', rules: 'poteri', diff: 'normale', target: '3', field: 'erba', ball: 'classico',
-    team0: 'ITA', team1: 'random', p2team: 'BRA', tourTeam: 'ITA', sound: true,
+    team0: 'ITA', team1: 'random', p2team: 'BRA', tourTeam: 'ITA', sound: true, full: false,
   };
   const settings = (() => {
     try { return Object.assign({}, DEFAULTS, JSON.parse(localStorage.getItem('cdt-settings') || '{}')); }
@@ -160,11 +160,11 @@
   // =====================================================================
   const newFx = () => ({ piombo: 0, piomboTurn: false, laser: 0, laserGold: false, giro: false, giroGold: false, dribble: 0, volante: 0 });
   const S = {
-    phase: 'menu',      // menu | aim | spin | card | cpu | moving | goal | over
+    phase: 'menu',      // menu | aim | card | cpu | moving | curve | goal | over
     paused: false,
     score: [0, 0], turn: 0, shot: 1, maxShots: BASE_SHOTS,
     touched: false, moveTime: 0, goalTimer: 0, scorer: -1, lastTouch: -1,
-    aim: null, spin: null, cardPick: null, cpu: null, shooterDisc: null,
+    aim: null, curve: null, curveReq: false, cardPick: null, cpu: null, shooterDisc: null,
     inv: [[], []], fx: [newFx(), newFx()],
     tokens: [], obstacles: [], solids: [], wind: null, invader: null,
     cards: [], lastShot: null, floats: [],
@@ -174,10 +174,14 @@
   let FIELD = FIELDS.erba, FIELD_ID = 'erba', BALL = BALLS.classico;
   let TEAMS = [];
   // Mondo "vivo": la simulazione d'anteprima ne usa una copia con sim = true.
-  const LW = { bodies: [], ball: null, sim: false, shooter: -1, dribble: false, hold: false, giroGold: false };
+  const LW = { bodies: [], ball: null, sim: false, shooter: -1, dribble: false, hold: false, giro: false, giroGold: false };
   let discs = [], ball = null;
   let particles = [];
   let dpr = 1, pitch = null;
+  // Porzione del campo logico mostrata a schermo: a campo intero si tagliano i bordi esterni.
+  const VIEW_NORMAL = { x: 0, y: 0, w: W, h: H };
+  const VIEW_FULL = { x: F.l - 6, y: F.t - DEPTH - 6, w: F.r - F.l + 12, h: F.b - F.t + 2 * DEPTH + 12 };
+  let VIEW = VIEW_NORMAL;
 
   const isCpu = (team) => !!M && M.mode !== '2p' && team === 1;
   const powers = () => !!M && M.rules === 'poteri';
@@ -404,10 +408,9 @@
     const j = (-(1 + E_BODY) * rv) / (ia + ib);
     a.vx -= j * nx * ia; a.vy -= j * ny * ia;
     b.vx += j * nx * ib; b.vy += j * ny * ib;
-    if (disc && disc.spin && Wd.giroGold && disc.i === Wd.shooter) bl.spin = disc.spin * 1.2;
-    else if (disc || a.isBall || b.isBall) bl.spin = 0;
-    if (!a.isBall) a.spin = 0;
-    if (!b.isBall) b.spin = 0;
+    if (a.isBall || b.isBall) bl.spin = 0;
+    // Tiro a giro: al primo contatto tra la pedina tirata e la palla si sceglie la curva.
+    if (disc && Wd.giro && disc.i === Wd.shooter) { Wd.giro = false; if (!Wd.sim) S.curveReq = true; }
     if (!Wd.sim) onImpact(a, b, -rv);
   }
 
@@ -552,15 +555,26 @@
   // Simula un tiro su una copia del mondo (anteprima laser, effetto, CPU).
   function simOpts(team) {
     const fx = S.fx[team];
-    return { dribble: fx.dribble > 0, hold: fx.dribble > 1, giroGold: fx.giro && fx.giroGold, heavy: fx.piombo > 0 || fx.piomboTurn };
+    return { dribble: fx.dribble > 0, hold: fx.dribble > 1, heavy: fx.piombo > 0 || fx.piomboTurn };
   }
-  function simulateShot(idx, vx, vy, spin, maxT, opts) {
+  function simulateShot(idx, vx, vy, maxT, opts) {
     const list = LW.bodies.map((b) => Object.assign({}, b));
-    const Wd = { bodies: list, ball: list[list.length - 1], sim: true, shooter: idx, dribble: opts.dribble, hold: opts.hold, giroGold: opts.giroGold };
+    const Wd = { bodies: list, ball: list[list.length - 1], sim: true, shooter: idx, dribble: opts.dribble, hold: opts.hold };
     const d = list[idx];
-    d.vx = vx; d.vy = vy; d.spin = spin || 0;
+    d.vx = vx; d.vy = vy;
     if (opts.heavy) d.m = 3;
     if (Wd.ball.attached >= 0 && Wd.ball.attached !== idx) Wd.ball.attached = -1;
+    return runSim(Wd, d, maxT);
+  }
+  // Prosegue il tiro in corso con un certo effetto sulla palla (anteprima della curva).
+  function simulateCurve(spin, maxT) {
+    const list = LW.bodies.map((b) => Object.assign({}, b));
+    const Wd = { bodies: list, ball: list[list.length - 1], sim: true, shooter: LW.shooter, dribble: false, hold: false };
+    Wd.ball.spin = spin;
+    return runSim(Wd, list[LW.shooter], maxT);
+  }
+  function runSim(Wd, d, maxT) {
+    const list = Wd.bodies;
     const dp = [{ x: d.x, y: d.y }], bp = [{ x: Wd.ball.x, y: Wd.ball.y }];
     const b0 = { x: Wd.ball.x, y: Wd.ball.y };
     let goal = -1;
@@ -798,7 +812,7 @@
   function varAvailable(team, gold) {
     const L = S.lastShot;
     if (!L || L.team === team) return false;
-    if (!['aim', 'cpu', 'goal', 'spin', 'card'].includes(S.phase)) return false;
+    if (!['aim', 'cpu', 'goal', 'card'].includes(S.phase)) return false;
     return !L.scored || gold;
   }
 
@@ -844,7 +858,7 @@
     S.tokens = sn.tokens;
     S.obstacles = sn.obstacles;
     S.lastTouch = sn.lastTouch;
-    S.invader = null; S.cpu = null; S.aim = null; S.spin = null; S.cardPick = null;
+    S.invader = null; S.cpu = null; S.aim = null; S.curve = null; S.cardPick = null;
     S.lastShot = null;
     LW.hold = false; LW.dribble = false;
     rebuildSolids();
@@ -866,7 +880,7 @@
     Object.assign(S, {
       score: [0, 0], inv: [[], []], fx: [newFx(), newFx()], tokens: [], obstacles: [], solids: [], wind: null,
       invader: null, cards: [], lastShot: null, floats: [], shotCount: 0, turnCount: 0, sinceGold: 0, lastTouch: -1,
-      paused: false, aim: null, spin: null, cardPick: null, cpu: null,
+      paused: false, aim: null, curve: null, curveReq: false, cardPick: null, cpu: null,
     });
     particles = [];
     S.turn = Math.random() < 0.5 ? 0 : 1;
@@ -883,7 +897,7 @@
   }
 
   function startTurn(newTeam, quiet) {
-    S.aim = null; S.spin = null; S.cardPick = null;
+    S.aim = null; S.curve = null; S.cardPick = null;
     S.touched = false;
     if (newTeam) {
       S.shot = 1; S.maxShots = BASE_SHOTS;
@@ -905,16 +919,17 @@
     return `Turno ${TEAMS[team].name}`;
   }
 
-  function shoot(disc, vx, vy, spin) {
+  function shoot(disc, vx, vy) {
     const team = S.turn, fx = S.fx[team];
     S.lastShot = { team, snap: takeSnap(), scored: false };
     if (ball.attached >= 0 && ball.attached !== disc.i) ball.attached = -1;
     disc.m = fx.piombo > 0 || fx.piomboTurn ? 3 : 1;
     disc.heavy = disc.m > 1;
     fx.piombo = 0;
-    disc.spin = fx.giro ? spin || 0 : 0;
+    LW.giro = fx.giro;
     LW.giroGold = fx.giro && fx.giroGold;
     fx.giro = false;
+    S.curveReq = false;
     if (fx.laser > 0) fx.laser--;
     if (fx.dribble > 0) { LW.dribble = true; fx.dribble--; LW.hold = fx.dribble > 0; }
     else { LW.dribble = false; LW.hold = false; }
@@ -924,7 +939,7 @@
     S.phase = 'moving';
     S.moveTime = 0;
     S.touched = ball.attached === disc.i;
-    S.aim = null; S.spin = null;
+    S.aim = null;
     maybeInvader();
     Sfx.flick(Math.hypot(vx, vy) / MAX_SPEED);
     updateStatus();
@@ -932,8 +947,9 @@
 
   function endShot() {
     const d = S.shooterDisc;
-    if (d) { d.m = 1; d.heavy = false; d.spin = 0; }
+    if (d) { d.m = 1; d.heavy = false; }
     ball.spin = 0;
+    LW.giro = false;
     if (ball.attached >= 0 && !LW.hold) ball.attached = -1;
     LW.dribble = false;
     S.shotCount++;
@@ -1024,6 +1040,31 @@
     updateStatus();
   }
 
+  // Tiro a giro: il tiro si ferma all'impatto con la palla e si sceglie la curva.
+  const curveMax = () => (LW.giroGold ? 2 : 1);
+  function enterCurve() {
+    S.phase = 'curve';
+    S.curve = { value: 0, id: null, x0: 0, cpu: isCpu(S.turn), t: 900 };
+    if (S.curve.cpu) S.curve.value = cpuCurve(S.turn);
+    Sfx.use();
+    updateStatus();
+  }
+  function resumeCurve() {
+    ball.spin = S.curve.value * curveMax();
+    S.curve = null;
+    S.phase = 'moving';
+    updateStatus();
+  }
+  function cpuCurve(team) {
+    const lvl = skillFrom(M.skillD);
+    let best = 0, bestSc = -Infinity;
+    for (const v of [-1, -0.6, -0.3, 0, 0.3, 0.6, 1]) {
+      const sc = evalOutcome(simulateCurve(v * curveMax(), 4), team);
+      if (sc > bestSc) { bestSc = sc; best = v; }
+    }
+    return clamp(best + (Math.random() * 2 - 1) * lvl.err * 3, -1, 1);
+  }
+
   function update(dt) {
     if (S.phase === 'moving') {
       S.moveTime += dt;
@@ -1034,6 +1075,9 @@
     } else if (S.phase === 'cpu' && S.cpu) {
       S.cpu.t -= dt * 1000;
       if (S.cpu.t <= 0) cpuStep();
+    } else if (S.phase === 'curve' && S.curve.cpu) {
+      S.curve.t -= dt * 1000;
+      if (S.curve.t <= 0) resumeCurve();
     }
     // Portieri che rientrano in area dopo il volo
     for (const d of discs) {
@@ -1081,7 +1125,7 @@
     } else {
       const c = S.cpu;
       S.cpu = null;
-      shoot(c.disc, c.vx, c.vy, c.spin);
+      shoot(c.disc, c.vx, c.vy);
     }
   }
 
@@ -1183,53 +1227,6 @@
     return speedFor(c.dist, contact, effFric(DISC_FRICTION));
   }
 
-  // Percorso di una pedina sola (senza urti) per mirare con l'effetto.
-  function kinPath(d, vx, vy, spin) {
-    const b = { x: d.x, y: d.y, vx, vy, spin, c: d.c, k: d.k };
-    const pts = [];
-    for (let t = 0; t < 3; t += SIM_STEP) {
-      const sp = Math.hypot(b.vx, b.vy);
-      if (sp < 5) break;
-      if (sp > FORCE_MIN_SPEED) {
-        const a = b.spin * SPIN_RATE * SIM_STEP, c = Math.cos(a), s = Math.sin(a);
-        const nvx = b.vx * c - b.vy * s; b.vy = b.vx * s + b.vy * c; b.vx = nvx;
-      }
-      const ns = Math.max(0, sp - (b.c + b.k * sp) * FIELD.fric * SIM_STEP);
-      b.vx *= ns / sp; b.vy *= ns / sp;
-      b.x += b.vx * SIM_STEP; b.y += b.vy * SIM_STEP;
-      pts.push({ x: b.x, y: b.y });
-    }
-    return pts;
-  }
-  function closestTo(pts, p) {
-    let best = pts[0] || p, bd = Infinity, bi = 0;
-    pts.forEach((q, i) => { const dd = Math.hypot(q.x - p.x, q.y - p.y); if (dd < bd) { bd = dd; best = q; bi = i; } });
-    return { pt: best, i: bi };
-  }
-  function aimWithSpin(d, target, speed, spin) {
-    const want = Math.atan2(target.y - d.y, target.x - d.x);
-    let ang = want;
-    for (let it = 0; it < 8; it++) {
-      const pts = kinPath(d, Math.cos(ang) * speed, Math.sin(ang) * speed, spin);
-      if (!pts.length) break;
-      const q = closestTo(pts, target).pt;
-      let diff = want - Math.atan2(q.y - d.y, q.x - d.x);
-      diff = Math.atan2(Math.sin(diff), Math.cos(diff));
-      ang += diff;
-    }
-    return ang;
-  }
-  function curvedBlocked(d, target, speed, spin) {
-    const ang = aimWithSpin(d, target, speed, spin);
-    const pts = kinPath(d, Math.cos(ang) * speed, Math.sin(ang) * speed, spin);
-    const stop = closestTo(pts, target).i;
-    const blockers = discs.filter((o) => o !== d).concat(S.solids);
-    for (let i = 0; i < stop; i += 3) {
-      for (const o of blockers) if (Math.hypot(o.x - pts[i].x, o.y - pts[i].y) < o.r + DISC_R - 3) return true;
-    }
-    return false;
-  }
-
   function evalOutcome(sim, team) {
     if (sim.goal === team) return 1000;
     if (sim.goal === 1 - team) return -1000;
@@ -1246,42 +1243,29 @@
     const heavy = fx.piombo > 0 || fx.piomboTurn;
     const dribble = fx.dribble > 0;
     const cands = cpuCandidates(team);
-    const build = (c, spin) => {
-      const speed = shotSpeed(c, heavy, dribble);
-      const ang = spin ? aimWithSpin(c.d, c.ghost, speed, spin) : Math.atan2(c.dir.y, c.dir.x);
-      return { disc: c.d, ang, speed, spin };
-    };
+    const build = (c) => ({ disc: c.d, ang: Math.atan2(c.dir.y, c.dir.x), speed: shotSpeed(c, heavy, dribble) });
     let pick = null;
     if (cands.length && fx.laser > 0) {
       // Con il laser la CPU "vede" l'esito: prova diversi tiri e sceglie il migliore.
       for (const c of cands.slice(0, 6)) {
-        for (const spin of fx.giro ? [0, 0.8, -0.8] : [0]) {
-          const p = build(c, spin);
-          const sim = simulateShot(p.disc.i, Math.cos(p.ang) * p.speed, Math.sin(p.ang) * p.speed, spin, 4, simOpts(team));
-          const sc = evalOutcome(sim, team);
-          if (!pick || sc > pick.sc) pick = Object.assign(p, { sc });
-        }
+        const p = build(c);
+        const sim = simulateShot(p.disc.i, Math.cos(p.ang) * p.speed, Math.sin(p.ang) * p.speed, 4, simOpts(team));
+        const sc = evalOutcome(sim, team);
+        if (!pick || sc > pick.sc) pick = Object.assign(p, { sc });
       }
     } else if (cands.length) {
-      const c = cands[0];
-      let spin = 0;
-      if (fx.giro) {
-        const speed = shotSpeed(c, heavy, dribble);
-        if (c.blocked) spin = [0.8, -0.8].find((s) => !curvedBlocked(c.d, c.ghost, speed, s)) || 0.8;
-        else spin = Math.random() < 0.5 ? 0.35 : -0.35;
-      }
-      pick = build(c, spin);
+      pick = build(cands[0]);
     } else {
       // Nessun tiro pulito: colpisci la palla con la pedina più vicina che può arrivarci.
       const usable = discs.filter((d) => d.team === team && !d.frozen && (!d.gk || gkCanReach(d, ball)));
       const d = usable.reduce((a, b) => (Math.hypot(b.x - ball.x, b.y - ball.y) < Math.hypot(a.x - ball.x, a.y - ball.y) ? b : a));
       const dl = Math.hypot(ball.x - d.x, ball.y - d.y) || 1;
-      pick = { disc: d, ang: Math.atan2(ball.y - d.y, ball.x - d.x), speed: speedFor(dl, 500, effFric(DISC_FRICTION)), spin: fx.giro ? 0.3 : 0 };
+      pick = { disc: d, ang: Math.atan2(ball.y - d.y, ball.x - d.x), speed: speedFor(dl, 500, effFric(DISC_FRICTION)) };
     }
     const errMul = fx.laser > 0 ? 0.5 : 1;
     const ang = pick.ang + (Math.random() * 2 - 1) * lvl.err * errMul;
     const speed = Math.min(MAX_SPEED, pick.speed * (1 + (Math.random() * 2 - 1) * lvl.pow * errMul));
-    return { stage: 'shoot', disc: pick.disc, vx: Math.cos(ang) * speed, vy: Math.sin(ang) * speed, spin: pick.spin, t: lvl.think, total: lvl.think };
+    return { stage: 'shoot', disc: pick.disc, vx: Math.cos(ang) * speed, vy: Math.sin(ang) * speed, t: lvl.think, total: lvl.think };
   }
 
   // =====================================================================
@@ -1289,7 +1273,7 @@
   // =====================================================================
   function toLogical(e) {
     const r = canvas.getBoundingClientRect();
-    return { x: ((e.clientX - r.left) / r.width) * W, y: ((e.clientY - r.top) / r.height) * H };
+    return { x: VIEW.x + ((e.clientX - r.left) / r.width) * VIEW.w, y: VIEW.y + ((e.clientY - r.top) / r.height) * VIEW.h };
   }
 
   function aimVector(aim) {
@@ -1330,8 +1314,8 @@
       updateStatus();
       return;
     }
-    if (S.phase === 'spin' && S.spin && S.spin.id == null) {
-      S.spin.id = e.pointerId; S.spin.x0 = p.x;
+    if (S.phase === 'curve' && !S.curve.cpu && S.curve.id == null) {
+      S.curve.id = e.pointerId; S.curve.x0 = p.x;
       try { canvas.setPointerCapture(e.pointerId); } catch (err) { /* ignorato */ }
       return;
     }
@@ -1347,18 +1331,16 @@
 
   canvas.addEventListener('pointermove', (e) => {
     const p = toLogical(e);
-    if (S.spin && e.pointerId === S.spin.id) { S.spin.value = clamp((p.x - S.spin.x0) / 110, -1, 1); return; }
+    if (S.curve && e.pointerId === S.curve.id) { S.curve.value = clamp((p.x - S.curve.x0) / 110, -1, 1); return; }
     if (!S.aim || e.pointerId !== S.aim.id) return;
     S.aim.x = p.x; S.aim.y = p.y;
     e.preventDefault();
   });
 
   function release(e, cancel) {
-    if (S.spin && e.pointerId === S.spin.id) {
-      const sp = S.spin;
-      if (cancel) { sp.id = null; return; }
-      S.spin = null;
-      shoot(sp.disc, sp.vx, sp.vy, sp.value);
+    if (S.curve && e.pointerId === S.curve.id) {
+      if (cancel) { S.curve.id = null; return; }
+      resumeCurve();
       return;
     }
     if (!S.aim || e.pointerId !== S.aim.id) return;
@@ -1368,13 +1350,7 @@
     if (cancel || S.phase !== 'aim') return;
     const v = aimVector(aim);
     if (!v || v.len < 16) return; // trascinamento troppo corto: annulla
-    if (S.fx[S.turn].giro) {
-      S.phase = 'spin';
-      S.spin = { disc: aim.disc, vx: v.dx * v.speed, vy: v.dy * v.speed, value: 0, id: null, x0: 0 };
-      updateStatus();
-      return;
-    }
-    shoot(aim.disc, v.dx * v.speed, v.dy * v.speed, 0);
+    shoot(aim.disc, v.dx * v.speed, v.dy * v.speed);
   }
   canvas.addEventListener('pointerup', (e) => release(e, false));
   canvas.addEventListener('pointercancel', (e) => release(e, true));
@@ -1414,10 +1390,16 @@
   // Rendering: campo
   // =====================================================================
   function resize() {
+    document.body.classList.toggle('full', !!settings.full && S.phase !== 'menu');
+    document.body.classList.toggle('vs-cpu', !!M && M.mode !== '2p');
+    VIEW = document.body.classList.contains('full') ? VIEW_FULL : VIEW_NORMAL;
+    $('fullBtn').textContent = settings.full ? '🗗' : '⛶';
+    $('fullBtn').setAttribute('aria-label', settings.full ? 'Esci da campo intero' : 'Campo intero');
     const rect = stage.getBoundingClientRect();
-    const availW = Math.max(100, rect.width - 12), availH = Math.max(100, rect.height - 4);
-    const scale = Math.min(availW / W, availH / H);
-    const cssW = Math.floor(W * scale), cssH = Math.floor(H * scale);
+    const pad = settings.full ? 0 : 12;
+    const availW = Math.max(100, rect.width - pad), availH = Math.max(100, rect.height - pad / 3);
+    const scale = Math.min(availW / VIEW.w, availH / VIEW.h);
+    const cssW = Math.floor(VIEW.w * scale), cssH = Math.floor(VIEW.h * scale);
     dpr = Math.min(window.devicePixelRatio || 1, 3);
     canvas.style.width = cssW + 'px';
     canvas.style.height = cssH + 'px';
@@ -1426,8 +1408,12 @@
     pitch = document.createElement('canvas');
     pitch.width = canvas.width; pitch.height = canvas.height;
     const pc = pitch.getContext('2d');
-    pc.setTransform(canvas.width / W, 0, 0, canvas.height / H, 0, 0);
+    viewTransform(pc);
     drawPitch(pc, FIELD_ID);
+  }
+  function viewTransform(g) {
+    const sx = canvas.width / VIEW.w, sy = canvas.height / VIEW.h;
+    g.setTransform(sx, 0, 0, sy, -VIEW.x * sx, -VIEW.y * sy);
   }
 
   function speckles(g, R, n, x0, y0, w, h, colors, s0, s1, alpha) {
@@ -1573,11 +1559,11 @@
   function drawDisc(g, d, t) {
     const team = TEAMS[d.team];
     const myTurn = (S.phase === 'aim' && !isCpu(S.turn) && d.team === S.turn && !d.frozen);
-    const active = myTurn || (S.aim && S.aim.disc === d) || (S.spin && S.spin.disc === d) || (S.cpu && S.cpu.disc === d);
+    const active = myTurn || (S.aim && S.aim.disc === d) || (S.cpu && S.cpu.disc === d);
     g.fillStyle = 'rgba(0,0,0,0.32)';
     g.beginPath(); g.ellipse(d.x + 3, d.y + 5, d.r, d.r * 0.9, 0, 0, TAU); g.fill();
     if (active) {
-      const pulse = (S.aim && S.aim.disc === d) || (S.spin && S.spin.disc === d) ? 1 : 0.5 + 0.5 * Math.sin(t * 5);
+      const pulse = S.aim && S.aim.disc === d ? 1 : 0.5 + 0.5 * Math.sin(t * 5);
       g.strokeStyle = `rgba(255,255,255,${0.35 + 0.45 * pulse})`;
       g.lineWidth = 3;
       g.beginPath(); g.arc(d.x, d.y, d.r + 5 + pulse * 2, 0, TAU); g.stroke();
@@ -1917,7 +1903,7 @@
     g.setLineDash([]); g.lineCap = 'butt'; g.lineJoin = 'miter';
   }
 
-  function drawAim(g, disc, dx, dy, power, finger, spin, team) {
+  function drawAim(g, disc, dx, dy, power, finger, team) {
     const col = BALL.aim;
     const fx = S.fx[team];
     const speed = power * MAX_SPEED;
@@ -1929,10 +1915,10 @@
       g.beginPath(); g.moveTo(disc.x, disc.y); g.lineTo(finger.x, finger.y); g.stroke();
       g.setLineDash([]);
     }
-    if (laser || spin) {
-      const sim = simulateShot(disc.i, dx * speed, dy * speed, spin || 0, 4, simOpts(team));
+    if (laser) {
+      const sim = simulateShot(disc.i, dx * speed, dy * speed, 4, simOpts(team));
       strokePath(g, sim.dp, L, col, [2, 9], 2.5);
-      if (laser) {
+      {
         strokePath(g, sim.bp, L, col, [9, 6], 3);
         if (sim.goal >= 0) {
           const end = sim.bp[sim.bp.length - 1];
@@ -1967,22 +1953,27 @@
     }
   }
 
-  function drawSpinUI(g) {
-    const sp = S.spin;
-    const y = F.b - 40;
+  function drawCurveUI(g) {
+    const sp = S.curve;
+    // Anteprima della traiettoria curva della palla
+    const sim = simulateCurve(sp.value * curveMax(), 4);
+    strokePath(g, sim.bp, 700, BALL.aim, [9, 6], 3.5);
+    g.strokeStyle = BALL.aim; g.lineWidth = 3;
+    g.beginPath(); g.arc(ball.x, ball.y, ball.r + 6 + Math.sin(performance.now() / 120) * 2, 0, TAU); g.stroke();
+    const y = ball.y > CY ? F.t + AREA_H + 60 : F.b - AREA_H - 40;
     g.fillStyle = 'rgba(15,23,42,0.7)';
     g.fillRect(CX - 150, y - 16, 300, 32);
     g.fillStyle = 'rgba(255,255,255,0.25)'; g.fillRect(CX - 1, y - 12, 2, 24);
     g.fillStyle = BALL.aim;
     dot(g, CX + sp.value * 135, y, 11);
     g.fillStyle = '#ffffff'; g.font = '800 12px system-ui, sans-serif'; g.textAlign = 'center'; g.textBaseline = 'middle';
-    g.fillText('◀ EFFETTO ▶', CX, y - 28);
+    g.fillText(sp.cpu ? 'EFFETTO CPU' : '◀ TRASCINA PER CURVARE ▶', CX, y - 28);
   }
 
   function render(t) {
     ctx.setTransform(1, 0, 0, 1, 0, 0);
     if (pitch) ctx.drawImage(pitch, 0, 0);
-    ctx.setTransform(canvas.width / W, 0, 0, canvas.height / H, 0, 0);
+    viewTransform(ctx);
     if (!ball) return;
 
     drawObstacles(ctx, t);
@@ -1994,15 +1985,13 @@
 
     if (S.aim) {
       const v = aimVector(S.aim);
-      if (v && v.len >= 16) drawAim(ctx, S.aim.disc, v.dx, v.dy, v.power, S.aim, 0, S.turn);
-    } else if (S.spin) {
-      const spd = Math.hypot(S.spin.vx, S.spin.vy);
-      drawAim(ctx, S.spin.disc, S.spin.vx / spd, S.spin.vy / spd, spd / MAX_SPEED, null, S.spin.value, S.turn);
-      drawSpinUI(ctx);
+      if (v && v.len >= 16) drawAim(ctx, S.aim.disc, v.dx, v.dy, v.power, S.aim, S.turn);
+    } else if (S.curve) {
+      drawCurveUI(ctx);
     } else if (S.cpu && S.cpu.stage === 'shoot') {
       const sp = Math.hypot(S.cpu.vx, S.cpu.vy);
       const grow = Math.min(1, 1.4 * (1 - S.cpu.t / S.cpu.total));
-      drawAim(ctx, S.cpu.disc, S.cpu.vx / sp, S.cpu.vy / sp, (sp / MAX_SPEED) * grow, null, S.cpu.spin * grow, S.turn);
+      drawAim(ctx, S.cpu.disc, S.cpu.vx / sp, S.cpu.vy / sp, (sp / MAX_SPEED) * grow, null, S.turn);
     }
 
     for (const p of particles) {
@@ -2096,7 +2085,7 @@
     const who = `<span class="who" style="color:${team.ui}">${teamLabel(S.turn)}</span>`;
     let msg = '&nbsp;';
     if (S.phase === 'aim') msg = `${who} · trascina indietro una pedina e rilascia`;
-    else if (S.phase === 'spin') msg = `${who} · trascina a destra o sinistra per l'effetto, poi rilascia`;
+    else if (S.phase === 'curve') msg = S.curve.cpu ? `${who} · sceglie l'effetto…` : `${who} · trascina a destra o sinistra per curvare la palla, poi rilascia`;
     else if (S.phase === 'card') msg = `${who} · tocca la pedina avversaria da ammonire`;
     else if (S.phase === 'cpu') msg = `${who} · sta mirando…`;
     else if (S.phase === 'moving') msg = `${who} · tiro in corso`;
@@ -2104,7 +2093,7 @@
     st.innerHTML = msg;
     const shots = $('shots');
     shots.innerHTML = '';
-    if (['aim', 'cpu', 'moving', 'spin', 'card'].includes(S.phase)) {
+    if (['aim', 'cpu', 'moving', 'curve', 'card'].includes(S.phase)) {
       for (let i = 1; i <= S.maxShots; i++) {
         const el = document.createElement('i');
         if (i <= S.maxShots - S.shot + 1) el.className = 'on';
@@ -2282,7 +2271,7 @@
 
   function openHome() {
     S.phase = 'menu';
-    S.aim = null; S.cpu = null; S.spin = null; S.cardPick = null;
+    S.aim = null; S.cpu = null; S.curve = null; S.cardPick = null;
     S.paused = false;
     M = null;
     hideOverlays();
@@ -2495,6 +2484,17 @@
     else startMatch(Object.assign({}, M));
   });
   $('overMenuBtn').addEventListener('click', openHome);
+  $('fullBtn').addEventListener('click', () => {
+    settings.full = !settings.full;
+    saveSettings();
+    // Su browser che lo permettono, prova anche il vero schermo intero.
+    try {
+      const de = document.documentElement;
+      if (settings.full && de.requestFullscreen && !document.fullscreenElement) de.requestFullscreen().catch(() => {});
+      else if (!settings.full && document.fullscreenElement) document.exitFullscreen().catch(() => {});
+    } catch (e) { /* ignorato */ }
+    resize();
+  });
   $('soundBtn').addEventListener('click', () => {
     settings.sound = !settings.sound;
     saveSettings(); syncMenu(); Sfx.unlock();
@@ -2513,7 +2513,12 @@
     last = now;
     if (M && !S.paused && S.phase !== 'menu' && S.phase !== 'over' && !document.hidden) {
       acc += dt;
-      while (acc >= STEP) { physicsStep(LW, STEP); acc -= STEP; }
+      while (acc >= STEP && S.phase !== 'curve') {
+        physicsStep(LW, STEP);
+        acc -= STEP;
+        if (S.curveReq && S.phase === 'moving') { S.curveReq = false; enterCurve(); }
+      }
+      if (S.phase === 'curve') acc = 0;
       update(dt);
     } else {
       acc = 0;
@@ -2534,6 +2539,6 @@
     S, settings, ITEMS, OBST, FIELDS, LW,
     get ball() { return ball; }, get discs() { return discs; }, get M() { return M; }, get T() { return T; },
     cpuPlan, cpuUseItems, shoot, startMatch, quickConfig, applyItem, spawnObstacle, spawnToken, varAvailable, doVar,
-    simulateShot, simOpts, renderBracket, recordTour, newTour, playTourMatch, openSetup, gameOver,
+    simulateShot, simOpts, renderBracket, recordTour, newTour, playTourMatch, openSetup, gameOver, resumeCurve,
   };
 })();

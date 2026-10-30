@@ -16,6 +16,7 @@ Palloni: Classico, Retrò, Neon, Invernale, Futsal, Galassia. La linea di mira p
 - Trascina all'indietro una tua pedina e rilascia per tirare. La linea tratteggiata mostra metà della corsa.
 - Se una tua pedina tocca la palla tiri ancora, fino a 3 tiri per turno.
 - Il portiere non può uscire dalla sua area.
+- Il pulsante ⛶ in alto mostra il campo intero: toglie i bordi esterni e compatta l'interfaccia.
 
 ## Regole "Con poteri"
 Oggetti in campo: li prende chi ci passa sopra con una pedina o ci manda sopra la palla (massimo 2 in tasca).
@@ -25,7 +26,7 @@ Ogni oggetto ha 1 possibilità su 6 di essere d'oro, e almeno uno ogni 10 lo è.
 |---|---|---|
 | Fiato | 4 tiri nel turno | 5 tiri |
 | Palla di piombo | La pedina pesa il triplo per un tiro | Tutto il turno |
-| Tiro a giro | Dopo la mira, trascina di lato per curvare | Curva anche la palla |
+| Tiro a giro | All'impatto con la palla il gioco si ferma: trascina di lato per far curvare la palla | Curva fino al doppio |
 | Laser | Mostra il percorso della palla dopo l'impatto e allunga la mira del 60% | +100%, per 2 tiri |
 | Dribbling | La palla resta attaccata alla pedina per un tiro | 2 tiri, la palla resta incollata |
 | Cartellino giallo | Una pedina avversaria resta ferma nel suo prossimo turno | Due pedine |
