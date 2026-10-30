@@ -2624,6 +2624,6 @@
     S, settings, ITEMS, OBST, FIELDS, LW,
     get ball() { return ball; }, get discs() { return discs; }, get M() { return M; }, get T() { return T; },
     cpuPlan, cpuUseItems, shoot, startMatch, quickConfig, applyItem, spawnObstacle, spawnToken, varAvailable, doVar,
-    simulateShot, simOpts, renderBracket, recordTour, newTour, playTourMatch, openSetup, gameOver, resumeCurve,
+    simulateShot, simOpts, renderBracket, recordTour, newTour, playTourMatch, openSetup, gameOver, resumeCurve, cpuCurve,
   };
 })();
